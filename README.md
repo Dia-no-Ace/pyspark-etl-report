@@ -11,18 +11,17 @@ ETL-процесс распределенной обработки данных 
 
 Технологии:
 1) REST API
-2) распределенное хранилище данных HDFS
+2) распределенная файловая система HDFS
 3) фреймворк обработки больших данных PySpark
 4) база данных PostgreSQL
 5) Docker compose
 6) платформа для визуализации данных Superset
 
-Работа написана на Python с использованием Jupyter notebook.
+Проект написан на Python с использованием Jupyter notebook.
 Все компоненты приложения, за исключением PostgreSQL, разворачивается из Docker-контейнеров.
 
 Системные требования:
 - Docker compose
-- Spark ???
 - Postgres 17
 
 
@@ -32,25 +31,21 @@ ETL-процесс распределенной обработки данных 
 - Pyspark_job_articles.ipnb - jupyter-блокнот с обработкой данных на PySpark
 - hadoop.env - переменные окружения hdfs
 - superset.env - переменные окружения superset
-- dsshboard_export_20250624T103946.zip - файл с экспортированным из Superset дашбордом
+- dashboard_export_20250624T103946.zip - файл с экспортированным из Superset дашбордом
 
-Хосты: http://localhost:8088/ - Superset
-       http://localhost:8888/ - Jupyter Notebook
-       http://localhost:9870/ - Hadoop
+Хосты: 
+- http://localhost:8088/ - Superset
+- http://localhost:8888/ - Jupyter Notebook
+- http://localhost:9870/ - Hadoop
 
 
 Инструкция по разворачиванию приложения:
 
-1) запускаем питон
-python3
-2) импортируем файл с функцией парсинга
-import PP_articles_parsing
-3) вызываем функцию get_data_from_ap - 15 страниц по 1000 записей
-PP_articles_parsing.get_data_from_api('articles', 16, 'articles.json')
-PP_articles_parsing.get_data_from_api('videos', 16, 'videos.json')
+1) парсим данные с сайта dev.to
+`python3 PP_articles_parsing.py`
 Теперь в корневой папке появятся два файла с данными: articles.json и videos.json
-4) запускаем docker-compose
-docker-compose up
+2) запускаем docker-compose
+`docker-compose up`
 5) переходим в UI Hadoop - http://localhost:9870/ - у нас есть одна namenode и три datanode, сейчас они пустые
 6) складываем в namemode в корень файлы articles.json и videos.json
 docker cp articles.json namenode:/

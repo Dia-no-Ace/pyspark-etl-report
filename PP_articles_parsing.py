@@ -24,4 +24,7 @@ def get_data_from_api(entity: str, up_limit: int, file_name: str):
         json.dump(el, file)
         file.write('\n')
 
+get_data_from_api('articles', 16, 'articles.json')
+get_data_from_api('videos', 16, 'videos.json')
+
 
