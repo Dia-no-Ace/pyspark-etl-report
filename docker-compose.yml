@@ -1,0 +1,196 @@
+version: "3.7"
+
+x-superset-image: &superset-image apache/superset
+x-superset-user: &superset-user root
+x-superset-depends-on: &superset-depends-on
+  - db
+  - redis
+x-superset-volumes:
+  &superset-volumes # /app/pythonpath_docker will be appended to the PYTHONPATH in the final container
+  - ./superset/docker:/app/docker
+  - superset_home:/app/superset_home
+
+services:
+
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: namenode
+    restart: always
+    ports:
+      - 9870:9870
+      - 9000:9000
+    volumes:
+      - hadoop_namenode:/hadoop/dfs/name
+    environment:
+      - CLUSTER_NAME=test
+    env_file:
+      - ./hadoop.env
+
+  datanode1:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode1
+    restart: always
+    volumes:
+      - hadoop_datanode1:/hadoop/dfs/data
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870"
+    env_file:
+      - ./hadoop.env
+
+  datanode2:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode2
+    restart: always
+    volumes:
+      - hadoop_datanode2:/hadoop/dfs/data
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870"
+    env_file:
+      - ./hadoop.env
+
+  datanode3:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode3
+    restart: always
+    volumes:
+      - hadoop_datanode3:/hadoop/dfs/data
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870"
+    env_file:
+      - ./hadoop.env
+  
+  spark-notebook:
+    image: jupyter/pyspark-notebook
+    user: root
+    command: 
+    - /bin/bash
+    - -c
+    - | 
+      mkdir /home/jovyan/jars
+      wget https://repo1.maven.org/maven2/org/postgresql/postgresql/42.7.7/postgresql-42.7.7.jar -P /home/jovyan
+      start-notebook.sh --NotebookApp.token='' --NotebookApp.password=''
+    ports: 
+      - 8888:8888  # WebUI
+      - 4040:4040  # Spark WebUI when local session started 
+    depends_on:
+      - namenode
+    volumes:
+      - ./notebooks:/home/jovyan/notebooks
+
+  redis:
+    image: redis:7
+    container_name: superset_cache
+    restart: unless-stopped
+    volumes:
+      - redis:/data
+
+  db:
+    env_file:
+      - path: superset/docker/.env # default
+        required: true
+      - path: superset/docker/.env-local # optional override
+        required: false
+    image: postgres:15
+    container_name: superset_db
+    restart: unless-stopped
+    volumes:
+      - db_home:/var/lib/postgresql/data
+      - ./superset/docker/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
+
+  superset:
+    env_file:
+      - path: superset/docker/.env # default
+        required: true
+      - path: superset/docker/.env-local # optional override
+        required: false
+    image: *superset-image
+    container_name: superset_app
+    command: ["/app/docker/docker-bootstrap.sh", "app-gunicorn"]
+    user: "root"
+    restart: unless-stopped
+    ports:
+      - 8088:8088
+    depends_on:
+      superset-init:
+        condition: service_completed_successfully
+    volumes: *superset-volumes
+    environment:
+      SUPERSET_LOG_LEVEL: "${SUPERSET_LOG_LEVEL:-info}"
+
+  superset-init:
+    image: *superset-image
+    container_name: superset_init
+    command: ["/app/docker/docker-init.sh"]
+    env_file:
+      - path: superset/docker/.env # default
+        required: true
+      - path: superset/docker/.env-local # optional override
+        required: false
+    depends_on:
+      db:
+        condition: service_started
+      redis:
+        condition: service_started
+    user: "root"
+    volumes: *superset-volumes
+    healthcheck:
+      disable: true
+    environment:
+      SUPERSET_LOAD_EXAMPLES: "${SUPERSET_LOAD_EXAMPLES:-yes}"
+      SUPERSET_LOG_LEVEL: "${SUPERSET_LOG_LEVEL:-info}"
+
+  superset-worker:
+    image: *superset-image
+    container_name: superset_worker
+    command: ["/app/docker/docker-bootstrap.sh", "worker"]
+    env_file:
+      - path: superset/docker/.env # default
+        required: true
+      - path: superset/docker/.env-local # optional override
+        required: false
+    restart: unless-stopped
+    depends_on:
+      superset-init:
+        condition: service_completed_successfully
+    user: "root"
+    volumes: *superset-volumes
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "celery -A superset.tasks.celery_app:app inspect ping -d celery@$$HOSTNAME",
+        ]
+    environment:
+      SUPERSET_LOG_LEVEL: "${SUPERSET_LOG_LEVEL:-info}"
+
+  superset-worker-beat:
+    image: *superset-image
+    container_name: superset_worker_beat
+    command: ["/app/docker/docker-bootstrap.sh", "beat"]
+    env_file:
+      - path: superset/docker/.env # default
+        required: true
+      - path: superset/docker/.env-local # optional override
+        required: false
+    restart: unless-stopped
+    depends_on:
+      superset-init:
+        condition: service_completed_successfully
+    user: "root"
+    volumes: *superset-volumes
+    healthcheck:
+      disable: true
+    environment:
+      SUPERSET_LOG_LEVEL: "${SUPERSET_LOG_LEVEL:-info}"
+  
+volumes:
+  hadoop_namenode:
+  hadoop_datanode1:
+  hadoop_datanode2:
+  hadoop_datanode3:
+  superset_home:
+    external: false
+  db_home:
+    external: false
+  redis:
+    external: false
